@@ -10,6 +10,10 @@ terms of the MIT license. A copy of the license can be found in the file
 #include <string.h>  // memcpy, memset
 #include <stdlib.h>  // atexit
 
+#ifdef MI_VALGRIND
+#  include <valgrind/memcheck.h>
+#endif
+
 // Empty page used to initialize the small free pages array
 const mi_page_t _mi_page_empty = {
   0, false, false, false, false,
@@ -146,6 +150,9 @@ static void mi_heap_main_init(void) {
     _mi_random_init(&_mi_heap_main.random);
     _mi_heap_main.keys[0] = _mi_heap_random_next(&_mi_heap_main);
     _mi_heap_main.keys[1] = _mi_heap_random_next(&_mi_heap_main);
+    #if MI_VALGRIND
+    VALGRIND_CREATE_MEMPOOL_EXT(&_mi_heap_main, 0, false, VALGRIND_MEMPOOL_METAPOOL);
+    #endif
   }
 }
 
@@ -202,6 +209,9 @@ static bool _mi_heap_init(void) {
     tld->segments.stats = &tld->stats;
     tld->segments.os = &tld->os;
     tld->os.stats = &tld->stats;
+    #if MI_VALGRIND
+    VALGRIND_CREATE_MEMPOOL_EXT(heap, 0, false, VALGRIND_MEMPOOL_METAPOOL);
+    #endif
     _mi_heap_set_default_direct(heap);    
   }
   return false;
@@ -483,7 +493,11 @@ void mi_process_init(void) mi_attr_noexcept {
   _mi_verbose_message("process init: 0x%zx\n", _mi_thread_id());
   _mi_process_is_initialized = true;
   mi_process_setup_auto_thread_done();
-
+#ifdef MI_VALGRIND
+  if (RUNNING_ON_VALGRIND) {
+    _mi_verbose_message("running valgrind : %d\n", RUNNING_ON_VALGRIND);
+  }
+#endif
   
   mi_detect_cpu_features();
   _mi_os_init();

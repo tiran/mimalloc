@@ -21,6 +21,7 @@ option(MI_BUILD_OBJECT      "Build object library" ON)
 option(MI_BUILD_TESTS       "Build test executables" ON)
 option(MI_DEBUG_TSAN        "Build with thread sanitizer (needs clang)" OFF)
 option(MI_DEBUG_UBSAN       "Build with undefined-behavior sanitizer (needs clang++)" OFF)
+option(MI_VALGRIND          "Build with Valgrind hooks" OFF)
 
 # deprecated options
 option(MI_CHECK_FULL        "Use full internal invariant checking in DEBUG mode (deprecated, use MI_DEBUG_FULL instead)" OFF)
@@ -28,6 +29,7 @@ option(MI_INSTALL_TOPLEVEL  "Install directly into $CMAKE_INSTALL_PREFIX instead
 option(MI_USE_LIBATOMIC     "Explicitly link with -latomic (on older systems) (deprecated and detected automatically)" OFF)
 
 include(GNUInstallDirs)
+include(CheckIncludeFile)
 include("cmake/mimalloc-config-version.cmake")
 
 set(mi_sources
@@ -164,6 +166,15 @@ if(MI_DEBUG_UBSAN)
   else()
     message(WARNING "Can only use thread sanitizer with a debug build (CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})")    
   endif()
+endif()
+
+if(MI_VALGRIND)
+  message(STATUS "Build with Valgrind hooks (MI_VALGRIND=ON)")
+  CHECK_INCLUDE_FILE(valgrind/memcheck.h HAVE_VALGRIND_H)
+  if(NOT "${HAVE_VALGRIND_H}" STREQUAL "1")
+    message(FATAL_ERROR "MI_VALGRIND=ON requires valgrind/memcheck.h")
+  endif()
+  list(APPEND mi_defines MI_VALGRIND=1)
 endif()
 
 if(MI_USE_CXX)
