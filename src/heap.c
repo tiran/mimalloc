@@ -11,10 +11,6 @@ terms of the MIT license. A copy of the license can be found in the file
 
 #include <string.h>  // memset, memcpy
 
-#ifdef MI_VALGRIND
-#  include <valgrind/memcheck.h>
-#endif
-
 #if defined(_MSC_VER) && (_MSC_VER < 1920)
 #pragma warning(disable:4204)  // non-constant aggregate initializer
 #endif
@@ -208,9 +204,7 @@ mi_heap_t* mi_heap_new(void) {
   // push on the thread local heaps list
   heap->next = heap->tld->heaps;
   heap->tld->heaps = heap;
-  #if MI_VALGRIND
-  VALGRIND_CREATE_MEMPOOL_EXT(heap, 0, false, VALGRIND_MEMPOOL_METAPOOL);
-  #endif
+  _mi_vg_create_mempool(heap);
   return heap;
 }
 
@@ -259,12 +253,10 @@ static void mi_heap_free(mi_heap_t* heap) {
   }
   mi_assert_internal(heap->tld->heaps != NULL);
 
-  #if MI_VALGRIND
-  VALGRIND_DESTROY_MEMPOOL(heap);
-  #endif
-
   // and free the used memory
   mi_free(heap);
+
+  _mi_vg_destroy_mempool(heap);
 }
 
 

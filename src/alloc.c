@@ -19,10 +19,6 @@ terms of the MIT license. A copy of the license can be found in the file
 #include "alloc-override.c"
 #undef MI_IN_ALLOC_C
 
-#ifdef MI_VALGRIND
-#  include <valgrind/memcheck.h>
-#endif
-
 // ------------------------------------------------------
 // Allocation
 // ------------------------------------------------------
@@ -92,9 +88,7 @@ extern inline mi_decl_restrict void* mi_heap_malloc_small(mi_heap_t* heap, size_
     mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
   }
   #endif
-  #if MI_VALGRIND
-  VALGRIND_MEMPOOL_ALLOC(heap, p, size);
-  #endif
+  _mi_vg_alloc(heap, p, size);
   return p;
 }
 
@@ -118,11 +112,7 @@ extern inline mi_decl_restrict void* mi_heap_malloc(mi_heap_t* heap, size_t size
       mi_heap_stat_increase(heap, malloc, mi_usable_size(p));
     }
     #endif
-    #if MI_VALGRIND
-    if (p != NULL) {
-      VALGRIND_MEMPOOL_ALLOC(heap, p, size);
-    }
-    #endif
+    _mi_vg_alloc(heap, p, size);
     return p;
   }
 }
@@ -155,9 +145,7 @@ mi_decl_restrict void* mi_zalloc_small(size_t size) mi_attr_noexcept {
   void* p = mi_malloc_small(size);
   if (p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p), p, size);  // todo: can we avoid getting the page again?
-    #if MI_VALGRIND
-    VALGRIND_MAKE_MEM_DEFINED(p, size);
-    #endif
+    _mi_vg_mem_defined(p, size);
   }
   return p;
 }
@@ -166,9 +154,7 @@ void* _mi_heap_malloc_zero(mi_heap_t* heap, size_t size, bool zero) {
   void* p = mi_heap_malloc(heap,size);
   if (zero && p != NULL) {
     _mi_block_zero_init(_mi_ptr_page(p),p,size);  // todo: can we avoid getting the page again?
-    #if MI_VALGRIND
-    VALGRIND_MAKE_MEM_DEFINED(p, size);
-    #endif
+    _mi_vg_mem_defined(p, size);
   }
   return p;
 }
@@ -503,14 +489,9 @@ void mi_free(void* p) mi_attr_noexcept
   mi_page_t* const page = _mi_segment_page_of(segment, p);
   mi_block_t* const block = (mi_block_t*)p;
 
-  VALGRIND_MAKE_MEM_DEFINED(page, mi_page_block_size(page));
-
   if (mi_likely(tid == mi_atomic_load_relaxed(&segment->thread_id) && page->flags.full_aligned == 0)) {  // the thread id matches and it is not a full page, nor has aligned blocks
     // local, and not full or aligned
-    if (mi_unlikely(mi_check_is_double_free(page,block))) {
-      VALGRIND_MAKE_MEM_UNDEFINED(page, mi_page_block_size(page));
-      return;
-    }
+    if (mi_unlikely(mi_check_is_double_free(page,block))) return;
     mi_check_padding(page, block);
     mi_stat_free(page, block);
     #if (MI_DEBUG!=0)
@@ -527,10 +508,7 @@ void mi_free(void* p) mi_attr_noexcept
     // note: recalc page in generic to improve code generation
     mi_free_generic(segment, tid == segment->thread_id, p);
   }
-  #if MI_VALGRIND
-  VALGRIND_MEMPOOL_FREE(mi_page_heap(page), p);
-  VALGRIND_MAKE_MEM_UNDEFINED(page, mi_page_block_size(page));
-  #endif
+  _mi_vg_free_page(page, p);
 }
 
 bool _mi_free_delayed_block(mi_block_t* block) {
@@ -650,23 +628,17 @@ void* _mi_heap_realloc_zero(mi_heap_t* heap, void* p, size_t newsize, bool zero)
   if (p == NULL) return _mi_heap_malloc_zero(heap,newsize,zero);
   size_t size = _mi_usable_size(p,"mi_realloc");
   if (newsize <= size && newsize >= (size / 2)) {
-    #if MI_VALGRIND
-    VALGRIND_MEMPOOL_CHANGE(heap, p, p, newsize);
-    #endif
+    _mi_vg_change(heap, p, p, newsize);
     return p;  // reallocation still fits and not more than 50% waste
   }
   void* newp = mi_heap_malloc(heap,newsize);
   if (mi_likely(newp != NULL)) {
-    #if MI_VALGRIND
-    VALGRIND_MEMPOOL_CHANGE(heap, p, newp, newsize);
-    #endif
+    _mi_vg_change(heap, p, newp, newsize);
     if (zero && newsize > size) {
       // also set last word in the previous allocation to zero to ensure any padding is zero-initialized
       size_t start = (size >= sizeof(intptr_t) ? size - sizeof(intptr_t) : 0);
       memset((uint8_t*)newp + start, 0, newsize - start);
-      #if MI_VALGRIND
-      VALGRIND_MAKE_MEM_DEFINED(newp, newsize);
-      #endif
+      _mi_vg_mem_defined(newp, newsize);
     }
     _mi_memcpy_aligned(newp, p, (newsize > size ? size : newsize));
     mi_free(p); // only free if successful

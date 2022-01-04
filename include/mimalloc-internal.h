@@ -950,5 +950,85 @@ static inline void _mi_memcpy_aligned(void* dst, const void* src, size_t n) {
 }
 #endif
 
+// -------------------------------------------------------------------------------
+// Valgrind hooks
+// -------------------------------------------------------------------------------
+
+#ifdef MI_VALGRIND
+#  include <valgrind/memcheck.h>
+#endif
+
+static inline void _mi_vg_create_mempool(mi_heap_t* const heap) {
+#ifdef MI_VALGRIND
+  // context, redzone, is_zeroed, flags
+  // VALGRIND_MEMPOOL_METAPOOL ?
+  VALGRIND_CREATE_MEMPOOL_EXT(heap, 0, true, 0);
+#else
+  MI_UNUSED(heap);
+#endif
+}
+
+static inline void _mi_vg_destroy_mempool(mi_heap_t* const heap) {
+#ifdef MI_VALGRIND
+  if (heap != NULL) {
+    VALGRIND_DESTROY_MEMPOOL(heap);
+  }
+#else
+  MI_UNUSED(heap);
+#endif
+}
+
+static inline void _mi_vg_alloc(mi_heap_t* const heap, void* addr, size_t size) {
+#ifdef MI_VALGRIND
+  if (addr != NULL) {
+    VALGRIND_MEMPOOL_ALLOC(heap, addr, size);
+  }
+#else
+  MI_UNUSED(heap);
+  MI_UNUSED(addr);
+  MI_UNUSED(size);
+#endif
+}
+
+static inline void _mi_vg_free_heap(mi_heap_t* const heap, void* addr) {
+#ifdef MI_VALGRIND
+  VALGRIND_MEMPOOL_FREE(heap, addr);
+#else
+  MI_UNUSED(heap);
+  MI_UNUSED(addr);
+#endif
+}
+
+static inline void _mi_vg_free_page(mi_page_t* const page, void* addr) {
+#ifdef MI_VALGRIND
+  mi_heap_t* const heap = mi_page_heap(page);
+  if (heap != NULL) {
+    VALGRIND_MEMPOOL_FREE(heap, addr);
+  }
+#else
+  MI_UNUSED(page);
+  MI_UNUSED(addr);
+#endif
+}
+
+static inline void _mi_vg_change(mi_heap_t* const heap, void* addr_a, void* addr_b, size_t size) {
+#ifdef MI_VALGRIND
+  VALGRIND_MEMPOOL_CHANGE(heap, addr_a, addr_b, size);
+#else
+  MI_UNUSED(heap);
+  MI_UNUSED(addr_a);
+  MI_UNUSED(addr_b);
+  MI_UNUSED(size);
+#endif
+}
+
+static inline void _mi_vg_mem_defined(void* addr, size_t size) {
+#ifdef MI_VALGRIND
+  VALGRIND_MAKE_MEM_DEFINED(addr, size);
+#else
+  MI_UNUSED(addr);
+  MI_UNUSED(size);
+#endif
+}
 
 #endif

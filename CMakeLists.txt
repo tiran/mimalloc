@@ -175,6 +175,8 @@ if(MI_VALGRIND)
     message(FATAL_ERROR "MI_VALGRIND=ON requires valgrind/memcheck.h")
   endif()
   list(APPEND mi_defines MI_VALGRIND=1)
+  # TODO: remove later, added for debugging
+  list(APPEND mi_cflags -g)
 endif()
 
 if(MI_USE_CXX)
